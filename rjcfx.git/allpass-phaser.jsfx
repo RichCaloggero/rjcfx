@@ -1,0 +1,27 @@
+desc:rjc stereo multiband allpass phase shifter
+
+import cookdsp.jsfx-inc
+
+
+slider1:1000<100,10000>Notch Frequency (Hz)
+slider2:1000<100,2000>Bandwidth (Hz)
+slider3:0<0,0.99>Feedback
+
+@init
+apL.apass(slider1, slider2, slider3);
+apR.apass(slider1, slider2, slider3);
+
+@slider
+apL.apass_set_freq(slider1);
+apR.apass_set_freq(slider1);
+apL.apass_set_bw(slider2);
+apR.apass_set_bw(slider2);
+apL.apass_set_feed(slider3);
+apR.apass_set_feed(slider3);
+
+@sample
+filt = apL.apass_do(spl0);
+spl0 = (spl0 + filt) * 0.5;  
+
+filt = apR.apass_do(spl1);
+spl1 = (spl1 + filt) * 0.5;

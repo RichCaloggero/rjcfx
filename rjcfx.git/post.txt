@@ -1,0 +1,10 @@
+First, as a new user around here, I want to thank the reaper devs for making an amazing piece of software and offering it to the world for a reasonable price.
+
+As a blind user, reaper has made it possible for me to do things that I could simply never do before. One of those things is exploring the wonderful world of DSP development. Eel2 (i.e. JSFX) is easy to write and does pretty much everything you'd ever want. I've also been using the cookDSP library found in the atk for reaper (ambisonic toolkit for reaper) distribution. It has many excellent filter implementations etc, all clearly documented in the code.
+
+Now for my question: as a blind user, I have no access to the jsfx development environment. I can get syntax error messages via my screen reader as they show up in the reaper fx window. However, I cannot write out debugging info for myself (i.e. there is no print function as in just about every other language). There is a way using the graphics facility to write text to the screen, but this is completely inaccessible to screen readers as it draws bitmaps.  Would it thus be possible to implement a simple way to write text to the screen in a way that is detectable by a screen reader (i.e. the screen reader can detect sliders and their values).  One way to do it would be to have a slider whose value you set to the value of a variable to examine it's contents, but this is kind of a lame way to do it.
+
+Thanx for any help / info ...
+
+ 
+-- Rich
