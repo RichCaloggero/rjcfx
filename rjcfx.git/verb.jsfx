@@ -1,0 +1,52 @@
+desc: Phase Vocoder Stereo Verb
+
+import cookdsp.jsfx-inc
+
+slider1:5<0,8,1{32,64,128,256,512,1024,2048,4096,8192}>PV Size
+slider2:1<0,2,1{2,4,8}>Overlaps
+slider3:0.75<0,1>Reverb Time
+slider4:0.9<0,1>Damping Factor
+
+@init
+size = pow(2, slider1+5);
+olaps = pow(2, slider2+1);
+pin.pvin(size, olaps);
+pin2.pvin(size, olaps);
+pout.pvout(size, olaps);
+pout2.pvout(size, olaps);
+pvv.pvverb(slider3, slider4, size/2);
+pvv2.pvverb(slider3, slider4, size/2);
+
+
+@slider
+size = pow(2, slider1+5);
+olaps = pow(2, slider2+1);
+// If fftsize or overlaps changed, re-initialize PVs.
+size != pin.size || olaps != pin.olaps ? (
+pin.pvin_resize(size, olaps);
+pin2.pvin_resize(size, olaps);
+pout.pvout_resize(size, olaps);
+pout2.pvout_resize(size, olaps);
+// Initialize effect's specific memories here...
+pvv.pvverb_resize(size/2);
+pvv2.pvverb_resize(size/2);
+);
+// Process effect's specific sliders here...
+pvv.pvverb_set_revtime(slider3);
+pvv2.pvverb_set_revtime(slider3);
+pvv.pvverb_set_damp(slider4);
+pvv2.pvverb_set_damp(slider4);
+
+@sample
+// Input / Output
+pin.pvin_do(spl0);
+pin2.pvin_do(spl1);
+spl0 = pout.pvout_get_output(pin.count);
+spl1 = pout2.pvout_get_output(pin2.count);
+
+pin.ready ? (
+pvv.pvverb_do(pin.magn, pin.freq);
+pvv2.pvverb_do(pin2.magn, pin2.freq);
+pout.pvout_do(pvv.magn, pvv.freq);
+pout2.pvout_do(pvv2.magn, pvv2.freq);
+);
