@@ -1,0 +1,15 @@
+desc: rjc debug test
+
+@init
+function message (s1) (#dbg_desc = s1;);
+function message (s1, s2) (
+#dbg_desc = s1;
+#dbg_desc += " ";
+#dbg_desc += s2;
+);
+
+num = 27;
+sprintf(#dbg_desc, "num is %d", num);
+
+
+

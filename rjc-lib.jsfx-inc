@@ -1,0 +1,64 @@
+@init
+
+/// panning
+
+
+// @object - use with namespace; returns left and right
+function rotate (l, r, rotation)
+local (rot, sign_left, sign_right, radius, angle) (
+this.left = l;
+this.right = r;
+rot = rotation * $pi/180; // degrees to radions
+sign_left = sign(this.left);
+sign_right = sign(this.right);
+
+//let angle = atan( this.left / this.right );
+angle = atan( this.right / this.left );
+
+//if ((sign_left === 1 && sign_right === -1) || (sign_left == -1 && sign_right == -1))  angle += $pi;
+
+(sign_left === 1 && sign_right === -1) || (sign_left == 1 && sign_right == 1) ? (
+angle += $pi;
+) : (sign_left == -1 && sign_right == 1) ? (
+angle += (2*$pi);
+) : this.right === 0 ? (
+this.left > 0 ? (
+angle = $pi/2;
+) : (
+angle = 3*$pi/2;
+);
+
+) : this.left === 0 ? (
+this.right > 0 ? (
+angle = 0;
+) : (
+angle = $pi;
+);
+);
+
+angle -= rot;
+
+radius = sqrt(this.left^2 + this.right^2);
+this.left = radius * sin(angle);
+this.right = radius * cos(angle);
+
+); // rotate
+
+// @object - use with namespace; returns left and right
+function pan2 (l, r, position) (
+// position from 0 to 1 inclusive
+this.left = (1 - position) * l;
+this.right = position * r;
+); // pan2
+
+// @object - use with namespace; returns left and right
+function phase_pan (l, r, p)
+local (_pan, _rot) (
+_rot.rotate(l, r, scale(p, 0,1, -90,90, 1));
+_pan.pan2(l, r, p);
+this.left = 0.5 * (_rot.left + _pan.left);
+this.right = 0.5 * (_rot.right + _pan.right);
+); // phase_pan
+
+/// filter bank
+

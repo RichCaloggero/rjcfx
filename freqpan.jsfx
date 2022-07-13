@@ -1,0 +1,315 @@
+desc:rjc stereo multiband panner
+
+import cookdsp.jsfx-inc
+import rjc-lib.jsfx-inc
+
+slider1:s_mix=1.0 <0.0, 1.0, 0.05>mix
+slider2:s_min_frequency=200.0 <20.0, 20000.0>minimum frequency
+slider3:s_max_frequency=5000.0 <20.0, 20000.0>maximum frequency
+slider4:s_band_width=500 <20, 500>band spacing
+slider5:s_bandcount=0 <0, 1000, 1>band count
+slider6:s_wet_gain=1.0 <0.0, 2.0, 0.1>wet gain
+slider7:s_output_gain=1.0 <0.0, 2.0, 0.1>output gain
+slider8:s_refresh_interval=40000<1000, 40000, 1>refresh interval (in samples)
+slider9:s_solo=0 <0, 1000, 1>solo
+slider10:s_rotation=0<-90.0, 90.0, 1>rotation (0 to randomize)
+slider11:s_pan=0<0.0, 1.0, 0.05>pan (0 to randomize)
+slider12:s_enable_filters=0 <0, 1, 1 {off,on}>enable filters
+slider13:s_enable_rotation=0<0, 1, 1 {off,on}>enable rotation
+slider14:s_enable_panners=0<0, 1, 1 {off,on}>enable panners
+slider15:s_enable_delays=0<0, 1, 1 {off,on}>enable delays
+slider16:s_min_delay=1<0, 100, 1>minimum delay (samples)
+slider17:s_max_delay=100<0, 100000, 1>maximum delay (samples)
+slider18:s_enable_all=0 <0, 1, 1 {off,on}>enable all processing
+
+@init
+quarterPi = 0.7853981634;
+halfPi    = 1.5707963268;
+function dBToGain (decibels) (10.0 ^ (decibels / 20.0));
+
+function get_angle (r)
+local (angle) (
+r === 0 ? (
+angle = rand(180) - 90;
+) : (
+angle = r;
+);
+
+angle;
+); // get_angle
+
+function get_pan (position)
+local (p) (
+position === 0 ? (
+p = rand(1);
+) : (
+p = position;
+);
+
+p;
+); // get_pan
+
+function set_list (list, value) local (i) (
+i = 1;
+while (i <= list[0]) (
+list[i] = value;
+);
+
+list;
+); // set_list
+
+function copy_list (l1, l2) local (i, _init) (
+_init === 0 ? (
+sprintf(#dbg_desc, "copy: %d, %f, %f", l1[0], l1[1], l1[2]);
+_init = 1;
+); // init debugging
+
+i = 1;
+while (i <= l1[0]) (
+l2[i] = l1[i];
+);
+
+l2;
+); // copy_list
+
+function calculate_bandcount (min_freq, max_freq, band_width)
+local (count) (
+count = floor((max_freq - min_freq) / band_width);
+//sprintf(#dbg_desc, "bandcount: %d", count);
+s_bandcount = count;
+slider_automate(s_bandcount);
+count;
+);
+
+
+function update_filters (bandcount, min_frequency, max_frequency, band_width)
+local (i, freq) (
+this._init === 0 ? (
+this.frequency = set(bandcount, 0);
+this.q = set(bandcount, 0);
+this.left.out = set(bandcount, 0);
+this.right.out = set(bandcount, 0);
+this._init = 1;
+);
+
+freq = min_frequency;
+i = 1;
+while(i <= bandcount) (
+this.frequency[i] = freq;
+this.q[i] = freq / band_width;
+//this.feedback[i] = rand(0.5);
+
+freq += band_width;
+i += 1;
+); // while
+
+bandcount;
+); // update_filters
+
+// @object
+function update_angles (bandcount, rotation) 
+local (i) (
+
+this._init === 0 ? (
+this.angles = set(bandcount, 0);
+this.left = this.right = 0;
+this._init = 1;
+); // init
+
+i = 1;
+while (i <= bandCount) (
+this.angles[i] = get_angle(rotation);
+
+i += 1;
+); // while
+
+bandcount;
+); // update_angles
+
+function update_panners (bandcount, position) 
+local (i) (
+
+this._init === 0 ? (
+this.pannerss= set(bandcount, 0);
+this.left = this.right = 0;
+this._init = 1;
+); // init
+
+i = 1;
+while (i <= bandCount) (
+this.panners[i] = get_pan(position);
+
+i += 1;
+); // while
+
+bandcount;
+); // update_panners
+
+function update_delays (bandcount)
+local (i, min_delay, max_delay, r) (
+
+this._init === 0 || s_max_delay > this.max_delay ? (
+this.min_delay = s_min_delay; // samples
+this.max_delay = s_max_delay; // samples
+
+this.left.time = set(bandcount, this.max_delay);
+this.right.time = set(bandcount, this.max_delay);
+this.left.feedback = set(bandcount, 0);
+this.right.feedback = set(bandcount, 0);
+this.left.out = set(bandcount, 0);
+this.right.out = set(bandcount, 0);
+this.left.Pdelay(this.left.time);
+this.right.Pdelay(this.right.time);
+
+//sprintf(#dbg_desc, "new max delay: %d, %d", this.max_delay, this.left.time[1]);
+this._init = 1;
+);
+
+i = 1;
+while(i <= bandcount) (
+this.left.time[i] = (this.max_delay - this.min_delay)  * rand(1.0)  + this.min_delay;
+this.right.time[i] = (this.max_delay - this.min_delay)  * rand(1.0)  + this.min_delay;
+//this.left.feedback[i] = rand(0.3);
+//this.right.feedback[i] = rand(0.3);
+
+i += 1;
+); // while
+
+bandcount;
+); // update_delays
+
+
+/// @start
+
+wet_gain = s_mix;
+dry_gain = 1 - abs(s_mix);
+sample_count = 0;
+bandcount = calculate_bandcount(s_min_frequency, s_max_frequency, s_band_width);
+
+// set filters
+filter.update_filters(bandcount, s_min_frequency, s_max_frequency, s_band_width);
+
+filter.left.Pbutbp(filter.frequency, filter.q);
+filter.right.Pbutbp(filter.frequency, filter.q);
+
+delay.update_delays(bandcount);
+
+// initialize rotation and panners
+rot.update_angles(bandcount, s_rotation);
+pan.update_panners(bandcount, s_pan);
+
+
+@slider
+wet_gain = s_mix;
+dry_gain = 1 - abs(s_mix);
+bandcount = calculate_bandcount(s_min_frequency, s_max_frequency, s_band_width);
+
+filter.update_filters(bandcount, s_min_frequency, s_max_frequency, s_band_width);
+filter.left.Pbutbp_set_freq(filter.frequency);
+filter.left.Pbutbp_set_q(filter.q);
+filter.right.Pbutbp_set_freq(filter.frequency);
+filter.right.Pbutbp_set_q(filter.q);
+
+delay.update_delays(bandcount);
+
+rot.update_angles(bandcount, s_rotation);
+pan.update_panners(bandcount, s_pan);
+
+s_solo > bandcount ? (
+s_solo = bandcount;
+slider_automate(s_solo);
+);
+
+sprintf(#dbg_desc, "initialized...");
+@sample
+sample_count += 1;
+
+out_left = 0;
+out_right = 0;
+
+s_enable_all > 0 ? (
+sample_count % s_refresh_interval == 0 ? (
+s_rotation === 0 ? (
+rot.update_angles(bandcount, 0);
+);
+
+s_pan === 0 ? (
+pan.update_panners(bandcount, 0);
+);
+
+delay.update_delays(bandcount);
+); // update
+
+
+s_enable_filters > 0 ? (
+filter.left.out = filter.left.Pbutbp_do(tmp(spl0));
+filter.right.out = filter.right.Pbutbp_do(tmp(spl1));
+); // filters
+
+s_enable_delays > 0 ? (
+delay.left.out = delay.left.Pdelay_read3(delay.left.time);
+delay.right.out = delay.right.Pdelay_read3(delay.right.time);
+
+s_enable_filters > 0 ? (
+delay.left.Pdelay_write(filter.left.out);
+delay.right.Pdelay_write(filter.right.out);
+) : (
+delay.left.Pdelay_write(spl0);
+delay.right.Pdelay_write(spl1);
+);
+); // delays
+
+
+s_enable_filters > 0 && s_solo > 0 && s_solo <= s_bandcount ? (
+out_left = filter.left.out[s_solo];
+out_right = filter.right.out[s_solo];
+) : ( // process all bands
+
+i = 1;
+while (i <= bandcount) (
+s_enable_delays ? (
+l = delay.left.out[i] / bandcount;
+r = delay.right.out[i] / bandcount;
+) : s_enable_filters ? (
+l = filter.left.out[i] / bandcount;
+r = filter.right.out[i] / bandcount;
+) : (
+l = spl0 / bandcount;
+r = spl1 / bandcount;
+);
+
+s_enable_rotation > 0 ? (
+rot.rotate(l, r, rot.angles[i]);
+) : (
+rot.left = l;
+rot.right = r;
+); // rotation
+
+s_enable_panners > 0 ? (
+pan.pan2(rot.left, rot.right, pan.panners[i]);
+) : (
+pan.left = rot.left;
+pan.right = rot.right;
+); // panners
+
+out_left += pan.left;
+out_right += pan.right;
+
+i += 1;
+); // while
+); // solo
+
+s_enable_all && !s_enable_filters && !s_enable_delays && !s_enable_rotation && !s_enable_panners ? (
+sprintf(#dbg_desc, "values: %f, %f", spl0, out_left);
+); // debug
+
+) : (
+// no processing
+out_left = spl0;
+out_right = spl1;
+); // process all
+
+// @output
+
+spl0 = s_output_gain * (dry_gain * spl0 + s_wet_gain * wet_gain * out_left);
+spl1 = s_output_gain * (dry_gain * spl1 + s_wet_gain * wet_gain * out_right);

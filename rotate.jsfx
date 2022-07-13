@@ -1,0 +1,29 @@
+function rotate (l, r, rotation)
+local(this.left, this.right, rotation, rot, sign_left, sign_right) (
+this.left = l;
+this.right = r;
+rot = rotation * $pi/180; // degrees to radions
+sign_left = sign(this.left);
+sign_right = sign(this.right);
+//let angle = atan( this.left / this.right );
+angle = atan( this.right / this.left );
+
+//if ((sign_left === 1 && sign_right === -1) || (sign_left == -1 && sign_right == -1))  angle += $pi;
+((sign_left === 1 && sign_right === -1) || (sign_left == 1 && sign_right == 1))  ? (
+angle += $pi;
+) : (sign_left == -1 && sign_right == 1) ? (
+angle += (2*$pi);
+) : (this.right === 0) ? (
+(this.left > 0) ? angle = $pi/2; : angle = 3*$pi/2;
+) : (this.left === 0) ? (
+(this.right > 0) ? angle = 0; : angle = $pi;
+);
+
+angle -= rot;
+
+radius = sqrt((this.left*this.left) + (this.right*this.right) ) ;
+this.left = sin(angle)*radius;
+this.right = cos(angle)*radius;
+
+} // rotate
+

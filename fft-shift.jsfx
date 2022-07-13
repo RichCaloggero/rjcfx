@@ -1,0 +1,110 @@
+desc: rjc FFT frequency shift
+
+import cookdsp.jsfx-inc
+
+slider1:5<0,8,1{32,64,128,256,512,1024,2048,4096,8192}>FFT Size
+slider2:1<0,2,1{2,4,8}>Overlaps
+slider3:1<0,3,1{hamming,hanning,bartlett,blackman}>Window Shape
+
+// Effect's specific sliders here...
+slider4:s_phase1=0.15<0.0,6.3,0.01>Phase 1
+slider5:s_phase2=0.15<0.0,6.3,0.01>Phase 2
+slider7:s_mix=0.3<0,1,0.05>Mix
+
+@init
+
+function do (real, imag, phase, manual) 
+local (input, ph1, ph2, q1, q2, mod1, mod2, up, down) (
+// Complex phase
+ph1 = manual> 0 ? manual : ph.phasor_do();
+ph2 = wrap(ph1+s_phase, 0, 1);
+
+// Complex sinusoid
+q1 = sin(2 * $pi * ph1);
+q2 = sin(2 * $pi * ph2);
+
+// Hilbert transform
+//hilb.hilbert_do(input);
+
+// Complex modulation
+mod1 = real * q1;
+mod2 = imag * q2;
+this.real = mod1;
+this.imag = mod2;
+
+// Sideband separation
+this.down = mod1 + mod2;
+this.up = mod1 - mod2;
+);
+
+// Sinusoid phase
+ph.phasor(s_shift, 0);
+
+size = pow(2, slider1+5);
+olaps = pow(2, slider2+1);
+fin.fftin(size, olaps, slider3);
+fin2.fftin(size, olaps, slider3);
+fout.fftout(size, olaps, slider3);
+fout2.fftout(size, olaps, slider3);
+
+wet_gain = s_mix;
+dry_gain = 1 - abs(s_mix);
+output_gain = 2 - abs(wet_gain - dry_gain);
+
+@slider
+ph.phasor_set_freq(s_shift);
+wet_gain = s_mix;
+dry_gain = 1 - abs(s_mix);
+output_gain = 2 - abs(wet_gain - dry_gain);
+
+
+size = pow(2, slider1+5);
+olaps = pow(2, slider2+1);
+// If fftsize or overlaps changed, re-initialize FFTs.
+size != fin.size || olaps != fin.olaps ? (
+fin.fftin_resize(size, olaps);
+fin2.fftin_resize(size, olaps);
+fout.fftout_resize(size, olaps);
+fout2.fftout_resize(size, olaps);
+// Initialize effect's specific memories here...
+
+);
+// Generate a new window if slider3 has changed.
+slider3 != fin.window ? (
+fin.fftin_set_window(slider3);
+fin2.fftin_set_window(slider3);
+fout.fftout_set_window(slider3);
+fout2.fftout_set_window(slider3);
+);
+// Process effect's specific sliders here...
+
+@sample
+in_left = spl0;
+in_right = spl1;
+
+// Input / Output
+fin.fftin_do(spl0);
+fin2.fftin_do(spl1);
+
+spl0 = output_gain * (dry_gain * spl0 + wet_gain * fout.fftout_get_output(fin.count));
+spl1 = output_gain * (dry_gain * spl1 + wet_gain * fout2.fftout_get_output(fin2.count));
+
+fin.ready ? (
+// New buffers ready for processing.
+
+// compute the inverse FFT.
+
+i=0;
+loop(size/2,
+fin.real[i] -= s_phase1;
+fin.imag[i] += s_phase1;
+
+fin2.real[i] += s_phase2;
+fin2.imag[i] -= s_phase2;
+
+);
+
+fout.fftout_do(fin.real, fin.imag);
+fout2.fftout_do(fin2.real, fin2.imag);
+);
+

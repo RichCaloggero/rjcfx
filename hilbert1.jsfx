@@ -1,0 +1,52 @@
+desc: Single Sideband Modulation Via The Hilbert Transform
+
+import cookdsp.jsfx-inc
+
+slider1:s_shift=0.3<0.01, 1, 0.01>Shifting Frequency (Hz)
+slider2:s_mix=0.3<0,1,0.05>Mix
+slider3:s_phase=0.15<0.0,1.0,0.05>Phase
+
+
+
+@init
+wet_gain = s_mix;
+dry_gain = 1 - abs(s_mix);
+output_gain = 2 - abs(wet_gain - dry_gain);
+
+
+
+// Initializes the Hilbert transform
+hilb.hilbert();
+// Sinusoid phase
+ph.phasor(s_shift, 0);
+
+@slider
+wet_gain = s_mix;
+dry_gain = 1 - abs(s_mix);
+output_gain = 2 - abs(wet_gain - dry_gain);
+
+ph.phasor_set_freq(s_shift);
+
+@sample
+// Mixed input
+l = spl0;
+r = spl1;
+// Complex phase
+ph1 = ph.phasor_do();
+ph2 = wrap(ph1+s_phase, 0, 1);
+// Complex sinusoid
+q1 = sin(2 * $pi * ph1);
+q2 = sin(2 * $pi * ph2);
+
+hilb.hilbert_do(0.707 * (l+r));
+mod1 = hilb.real * q1;
+mod2 = hilb.imag * q2;
+down = mod1 + mod2;
+up = mod1 - mod2;
+
+// Mix the sideband with input signal
+spl0 = output_gain * (dry_gain * l + wet_gain * up);
+spl1 = output_gain * (dry_gain * r - wet_gain * down);
+
+//spl1 += 0.5 * output_gain * (dry_gain * l + wet_gain * down);
+//spl0 += 0.5 * output_gain * (dry_gain * r - wet_gain * up);

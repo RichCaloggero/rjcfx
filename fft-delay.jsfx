@@ -1,0 +1,104 @@
+desc: FFT delay
+
+import cookdsp.jsfx-inc
+
+slider1:s_fft_size_index=8 <0, 8, 1{32,64,128,256,512,1024,2048,4096,8192}>FFT Size
+slider2:s_overlaps_index=1 <0, 2, 1{2,4,8}>Overlaps
+slider3:s_window_shape=1 <0, 3, 1{hamming,hanning,bartlett,blackman}>Window Shape
+slider4:s_mix=0.5 <0, 1, 0.1>mix
+
+@init
+min_real = min_imag = 1;
+max_real = max_imag = 0;
+wet_gain = s_mix;
+dry_gain = 1 - s_mix;
+
+size = pow(2, s_fft_size_index+5);
+overlaps = pow(2, s_overlaps_index+1);
+
+fft_in_left.fftin(size, overlaps, s_window_shape);
+fft_in_right.fftin(size, overlaps, s_window_shape);
+fft_out_left.fftout(size, overlaps, s_window_shape);
+fft_out_right.fftout(size, overlaps, s_window_shape);
+
+dl.delay(size);
+dr.delay(size);
+
+@slider
+wet_gain = s_mix;
+dry_gain = 1 - s_mix;
+
+size = pow(2, s_fft_size_index+5);
+overlaps = pow(2, s_overlaps_index+1);
+
+
+// If fftsize or overlaps changed, re-initialize FFTs.
+size != fft_in_left.size || overlaps != fft_in_left.overlaps ? (
+fft_in_left.fftin_resize(size, overlaps);
+fft_in_right.fftin_resize(size, overlaps);
+fft_out_left.fftout_resize(size, overlaps);
+fft_out_right.fftout_resize(size, overlaps);
+
+// Initialize effect's specific memories here...
+
+);
+
+// Generate a new window if slider3 has changed.
+s_window_shape != fft_in_left.window ? (
+fft_in_left.fftin_set_window(s_window_shape);
+fft_in_right.fftin_set_window(s_window_shape);
+fft_out_left.fftout_set_window(s_window_shape);
+fft_out_right.fftout_set_window(s_window_shape);
+);
+
+// Process effect's specific sliders here...
+
+@block
+sprintf(#dbg_desc, "min / max : %f, %f, %f, %f", min_real, min_imag, max_real, max_imag);
+
+@sample
+// Input / Output
+l = spl0;
+r = spl1;
+
+fft_in_left.fftin_do(l);
+fft_in_right.fftin_do(r);
+out_left = fft_out_left.fftout_get_output(fft_in_left.count);
+out_right = fft_out_right.fftout_get_output(fft_in_right.count);
+
+dl.delay_write(l);
+dr.delay_write(r);
+
+spl0 = out_left;
+spl1 = out_right;
+
+//spl0 = 0.5 * (dry_gain * dl.delay_read3(size/2); + wet_gain * out_left);
+//spl1 = 0.5 * (dry_gain * dr.delay_read3(size/2) + wet_gain * out_right);
+
+
+fft_in_left.ready ? (
+// New buffers ready for processing.
+// ... A simple thru...
+// compute the inverse FFT.
+
+i = 0;
+while (i < size/2) (
+fft_in_left.real[i] < min_real ? min_real = fft_in_left.real[i];
+fft_in_left.imag[i] < min_imag ? min_imag = fft_in_left.imag[i];
+fft_in_right.real[i] < min_real ? min_real = fft_in_right.real[i];
+fft_in_right.imag[i] < min_imag ? min_imag = fft_in_right.imag[i];
+
+fft_in_left.real[i] > max_real ? max_real = fft_in_left.real[i];
+fft_in_left.imag[i] > max_imag ? max_imag = fft_in_left.imag[i];
+fft_in_right.real[i] > max_real ? max_real = fft_in_right.real[i];
+fft_in_right.imag[i] > max_imag ? max_imag = fft_in_right.imag[i];
+
+i += 1;
+); // while
+
+fft_out_left.fftout_do(fft_in_left.real, fft_in_left.imag);
+fft_out_right.fftout_do(fft_in_right.real, fft_in_right.imag);
+
+
+);
+

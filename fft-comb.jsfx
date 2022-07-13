@@ -1,0 +1,48 @@
+desc:FFT Comb Filter
+
+import cookdsp.jsfx-inc
+
+// FFT parameters (only FFT Size for the example).
+slider1:5<0,8,1{32,64,128,256,512,1024,2048,4096,8192}>FFT Size
+// Effect's specific slider.
+slider2:2<2,100,1>Bin Step
+
+@init
+size = pow(2, slider1+5);
+// Initialize FFT with 4 overlaps and hanning window
+fin.fftin(size, 4);
+fout.fftout(size, 4);
+real = memalloc(size/2);
+imag = memalloc(size/2);
+
+@slider
+size = pow(2, slider1+5);
+// If size changed, re-initialize FFTs.
+size != fin.size ? (
+fin.fftin_resize(size, 4);
+fout.fftout_resize(size, 4);
+// Initialize effect's specific memories
+real = memalloc(size/2);
+imag = memalloc(size/2);
+);
+
+@sample
+// Compute FFT on both channels at the same time to save space
+fin.fftin_do((spl0 + spl1) * 0.707);
+spl0 = spl1 = fout.fftout_get_output(fin.count);
+
+fin.ready ? ( // New buffers ready for processing.
+k = 0;
+while (k < size/2) (
+// Passes the signal only for bins that are multiples of slider2 value
+k % slider2 == 0 ? (
+real[k] = fin.real[k]; 
+imag[k] = fin.imag[k];
+) : (
+real[k] = imag[k] = 0;
+);
+k += 1;
+);
+// compute the inverse FFT.
+fout.fftout_do(real, imag);
+);

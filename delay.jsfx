@@ -1,0 +1,32 @@
+
+desc:rjc delay test
+
+slider1:s_delay_size=96000 <1, 96000, 1>delay in samples
+slider2:s_wet_gain=0.5 <0.0, 1.0, 0.1>wet gain
+slider3:s_delay_time=0 <0, 2.0, 0.00001>delay in seconds
+
+import cookdsp.jsfx-inc
+
+@init
+dl.delay(s_delay_size);
+dr.delay(s_delay_size);
+
+
+
+@slider
+delay_samples = s_delay_time * srate;
+sprintf(#dbg_desc, "delay: %f, %d", s_delay_time, delay_samples);
+
+count = 0;
+
+@sample
+count += 1;
+l = spl0;
+r = spl1;
+
+dl.delay_write(l);
+dr.delay_write(r);
+
+spl0 = 0.5 * (l + s_wet_gain * dl.delay_read(delay_samples));
+spl1 = 0.5 * (r + s_wet_gain * dr.delay_read(delay_samples));
+
