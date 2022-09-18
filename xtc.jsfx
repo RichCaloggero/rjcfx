@@ -1,4 +1,7 @@
-desc: rjc - Stereo multitap delay with Feedback and xtc mode
+desc: rjc - v-test Stereo multitap delay with Feedback and xtc mode
+/* removed feedback from delay.write
+now both odd and even taps invert polarity
+*/
 
 import cookdsp.jsfx-inc
 
@@ -14,22 +17,21 @@ slider8:s_highcut=6000<20, 20000>low pass cutoff
 slider9:s_mix=0.42 <-1.0, 1.0>wet / dry mix
 
 @init
-function setupDelayBuffer () (
+function setupDelayBuffer () 
+local (l) (
 samps = s_delay_time * 0.001 * srate;
-buffer_length = samps * s_taps;
-d0.delay(buffer_length);
-d1.delay(buffer_length);
+l = ceil(samps) * s_taps;
+l > buffer_length ? (
+d0.delay(l+5);
+d1.delay(l+5);
+sprintf(#dbg_desc, "allocated: %d * %d = %d", s_taps, ceil(samps), l);
 );
 
+buffer_length = l;
+);
+
+function setup () (
 setupDelayBuffer();
-// Initializes the filters
-hp0.buthp(s_lowcut);
-hp1.buthp(s_lowcut);
-
-lp0.butlp(s_highcut);
-lp1.butlp(s_highcut);
-
-@slider
 
 setupDelayBuffer();
 delay_time = s_delay_time;
@@ -39,18 +41,39 @@ taps = s_taps;
 wet_gain = s_mix;
 dry_gain = 1 - abs(s_mix);
 output_gain = 2 - abs(wet_gain - dry_gain);
-
 secs = delay_time * 0.001;
+);
+
+/// @start
+setup();
+
+// Initializes the filters
+hp0.buthp(s_lowcut);
+hp1.buthp(s_lowcut);
+
+lp0.butlp(s_highcut);
+lp1.butlp(s_highcut);
+
+@slider
+setup();
 
 // set filter frequencies
+
 hp0.buthp_set_freq(s_lowcut);
 hp1.buthp_set_freq(s_lowcut);
 
 lp0.butlp_set_freq(s_highcut);
 lp1.butlp_set_freq(s_highcut);
 
+@block
+block_count += 1;
+
+//block_count % 200 === 0 ? sprintf(#dbg_desc, "blocks: %d", block_count);
+
 @sample
-sample_count = sample_count+1;
+sample_count += 1;
+
+
 in0 = spl0;
 in1 = spl1;
 
@@ -65,13 +88,12 @@ spl1 = lp1.butlp_do(spl1);
 );
 
 
-
 // handle delay taps
 i = 1;
 delay0 = 0;
 delay1 = 0;
 while (i <= taps) (
-gain = 1 / (decay^(i));
+gain = 1 / (decay^i);
 index = buffer_length - ((taps - i) * samps);
 
 s_interpolate_delay === 0 ? (

@@ -1,0 +1,391 @@
+desc:rjc multiband processor
+
+import cookdsp.jsfx-inc
+import rjc-lib.jsfx-inc
+
+slider1:s_mix=1.0 <-1.0, 1.0, 0.05>mix
+
+slider10:s_wet_gain=1.0 <-2.0, 2.0, 0.1>wet gain
+slider12:s_invert=0 <0, 2, 1 {off, left, right}>invert
+slider13:s_output_gain=1.0 <0.0, 2.0, 0.1>output gain
+
+slider14:s_frequency=0.1 <0.01, 2.0, 0.01>frequency
+slider15:s_frequency_offset=1.4 <0.1, 2.0, 0.1>frequency offset
+
+slider20:s_min_frequency=200.0 <20.0, 20000.0>minimum frequency
+slider21:s_max_frequency=5000.0 <20.0, 20000.0>maximum frequency
+slider22:s_band_width=500 <20, 500>band width
+slider23:s_bandcount=0 <0, 100, 1>band count
+
+slider30:s_enable_filters=1 <0, 1, 1 {off,on}>enable filters
+slider31:s_solo=0 <0, 100, 1>solo
+
+slider40:s_enable_hilbert=0 <0, 1, 1 {off,on}>enable hilbert transform
+slider41:s_mode=0 <0, 1, 1 {mid-side, l-r}>mode
+slider42:s_q1=0.0 <0.0, 1.0, 0.02>q1
+slider43:s_q2=0.0 <0.0, 1.0, 0.02>q2
+
+slider50:s_enable_rotation=0 <0, 1, 1 {off,on}>enable rotation
+slider51:s_rotation=0 <-90.0, 90.0, 1.0 >rotation (0 for random)
+
+slider60:s_enable_delays=0 <0, 1, 1 {off,on}>enable delays
+slider61:s_min_delay=3 <0, 100, 1>minimum delay (samples)
+slider62:s_max_delay=15 <0, 100000, 1>maximum delay (samples)
+
+slider63:s_enable_all=1 <0, 1, 1 {off,on}>enable all processing
+
+
+@init
+// global variables
+
+quarterPi = 0.7853981634;
+halfPi    = 1.5707963268;
+mode_ms = 0;
+mode_lr = 1;
+
+
+wet_gain = dry_gain = mix = 0.0;
+invert = 0;
+right_wet_gain = left_wet_gain = wet_gain;
+balance = 0.0;
+
+function msg (text) (
+sprintf(#dbg_desc, text);
+); // msg
+
+
+function dBToGain (decibels) (10.0 ^ (decibels / 20.0));
+
+function set_gains () (
+
+mix !== s_mix ? (
+//msg("setting mix parameters...");
+mix = s_mix;
+s_wet_gain = mix;
+slider_automate(s_wet_gain);
+dry_gain = abs(1-mix);
+); // s_mix changed
+
+wet_gain !== s_wet_gain ? (
+//msg("setting gain parameters...");
+wet_gain = s_wet_gain;
+right_wet_gain = left_wet_gain = wet_gain;
+); // s_wet_gain changed
+
+invert !== s_invert ? invert = s_invert;
+
+/*balance !== s_balance ? balance = s_balance;
+
+balance === 0 ? (
+left_wet_gain = right_wet_gain = wet_gain;
+) : balance > 0 ? (
+right_wet_gain = 1;
+left_wet_gain = abs(1 - balance);
+) : balance < 0 ? (
+left_wet_gain = 1;
+right_wet_gain = abs(1 - balance);
+);
+
+left_wet_gain *= wet_gain;
+right_wet_gain *= wet_gain;
+*/
+
+); // set_gains
+
+function get_angle (r)
+local (angle) (
+r === 0 ? (
+angle = rand(180) - 90;
+) : (
+angle = r;
+);
+
+angle;
+); // get_angle
+
+
+
+function calculate_bandcount (min_freq, max_freq, band_width)
+local (count) (
+count = floor((max_freq - min_freq) / band_width);
+//sprintf(#dbg_desc, "bandcount: %d", count);
+s_bandcount = count;
+slider_automate(s_bandcount);
+count;
+);
+
+function update_filters (bandcount, min_frequency, max_frequency, band_width)
+local (i, freq) (
+this._init === 0 ? (
+this.frequency = set(bandcount, 350.0);
+this.q = set(bandcount, 1.0);
+this.left.out = set(bandcount, 0);
+this.right.out = set(bandcount, 0);
+
+// initialize filters with dummy values
+this.left.Pbutbp(this.frequency, this.q);
+this.right.Pbutbp(this.frequency, this.q);
+
+
+this._init = 1;
+);
+
+// calculate and store frequency and q for each band
+freq = min_frequency;
+i = 1;
+while(i <= bandcount) (
+this.frequency[i] = freq;
+this.q[i] = freq / band_width;
+//this.feedback[i] = rand(0.5);
+
+freq += band_width;
+i += 1;
+); // while
+
+// now update the filters with actual values for each band
+this.left.Pbutbp_set_freq(this.frequency);
+this.left.Pbutbp_set_q(this.q);
+this.right.Pbutbp_set_freq(this.frequency);
+this.right.Pbutbp_set_q(this.q);
+); // update_filters
+
+// @object
+function update_hilbert (bandcount, frequency)
+local (i) (
+
+this._init === 0 ? (
+this.q1.frequency = set(bandcount, 0);
+this.q2.frequency = set(bandcount, 0);
+this.min_q = set(bandcount, 0.01);
+this.max_q = set(bandcount, 1.0);
+
+
+this._init = 1;
+); // init
+
+i  = 1;
+while (i <= bandcount) (
+this.q1.frequency[i] = frequency+ rand(0.5);
+this.q2.frequency[i] = s_frequency_offset * frequency+ rand(0.5);
+
+i += 1;
+); // while
+/*sprintf(#dbg_desc, "%f, %f, %f, %f, %f, %f",
+this.q1.frequency[0], this.q1.frequency[1], this.q1.frequency[2], 
+this.q2.frequency[0], this.q2.frequency[1], this.q2.frequency[2]
+); // debug
+*/
+
+this.q1.Prandom(this.min_q, this.max_q, this.q1.frequency, 0);
+this.q2.Prandom(this.min_q, this.max_q, this.q2.frequency, 0);
+); // update_hilbert
+
+// @object
+function update_angles (bandcount, angle, frequency) 
+local (i) (
+
+this._init === 0 ? (
+this.angle.min = set(bandcount, -90.0);
+this.angle.max = set(bandcount, 90.0);
+this.angle.frequency = set(bandcount, frequency);
+this.angle.mode = set(bandcount, 0);
+this.angle.Prandom(this.angle.min, this.angle.max, this.angle.frequency, this.angle.mode);
+
+this.angles = set(bandcount, 0);
+this.left = this.right = 0;
+this._init = 1;
+); // init
+
+// mode 0 means use random rotation, else use angle directly
+this.mode = angle === 0? 0 : angle;
+); // update_angles
+
+function update_delays (bandcount, min_delay, max_delay, frequency)
+local (i, r) (
+
+this._init === 0 || max_delay > this.max_delay ? (
+this.max_delay = max_delay;
+this.min_delay = min_delay;
+
+this.min = set(bandcount, this.min_delay); // samples
+this.max = set(bandcount, this.max_delay); // samples
+this.crossfade = set(bandcount, 3);
+this.mode = set(bandcount, 0); // samples
+this.left.frequency = set(bandcount, frequency);
+this.right.frequency = set(bandcount, s_frequency_offset * frequency);
+this.left.time.Prandom  (this.min, this.max, this.left.frequency, this.mode);
+this.right.time.Prandom  (this.min, this.max, this.right.frequency, this.mode);
+this.left.feedback = set(bandcount, 0);
+this.right.feedback = set(bandcount, 0);
+this.left.out = set(bandcount, 0);
+this.right.out = set(bandcount, 0);
+this.left.Psdelay(this.max, this.crossfade);
+this.right.Psdelay(this.max, this.crossfade);
+
+//sprintf(#dbg_desc, "new max delay: %d, %d", this.max_delay, this.left.time[1]);
+this._init = 1;
+);
+
+bandcount;
+); // update_delays
+
+
+/// @start
+
+set_gains();
+
+sample_count = 0;
+bandcount = calculate_bandcount(s_min_frequency, s_max_frequency, s_band_width);
+
+hilbert.hilbert();
+left_list = set(bandcount, 0);
+right_list = set(bandcount, 0);
+
+// set filters
+filter.update_filters(bandcount, s_min_frequency, s_max_frequency, s_band_width);
+
+delay.update_delays(bandcount, s_min_delay, s_max_delay, s_frequency);
+
+rot.update_angles(bandcount, s_rotation, s_frequency);
+
+hilbert.update_hilbert (bandcount, s_frequency);
+
+
+@slider
+set_gains();
+bandcount = calculate_bandcount(s_min_frequency, s_max_frequency, s_band_width);
+
+left_list = set(bandcount, 0);
+right_list = set(bandcount, 0);
+
+filter.update_filters(bandcount, s_min_frequency, s_max_frequency, s_band_width);
+
+delay.update_delays(bandcount, s_min_delay, s_max_delay, s_frequency);
+
+rot.update_angles(bandcount, s_rotation, s_frequency);
+
+//hilbert.update_hilbert (bandcount, s_frequency);
+
+s_solo > bandcount ? (
+s_solo = bandcount;
+slider_automate(s_solo);
+);
+
+sprintf(#dbg_desc, "dry=%f, wet=%f, %f, %f", dry_gain, wet_gain, left_wet_gain, right_wet_gain);
+
+@sample
+sample_count += 1;
+
+out_left = spl0;
+out_right = spl1;
+
+s_enable_all ? (
+out_left = out_right = 0;
+
+set_list(left_list, spl0);
+set_list(right_list, spl1);
+
+// handle polyphonic objects filters and delays first
+
+s_enable_filters ? (
+filter.left.out = filter.left.Pbutbp_do(tmp(spl0));
+filter.right.out = filter.right.Pbutbp_do(tmp(spl1));
+copy_list(filter.left.out, left_list);
+copy_list(filter.right.out, right_list);
+); // filters
+
+s_enable_delays ? (
+delay.left.Psdelay_write(left_list);
+delay.right.Psdelay_write(right_list);
+
+left_list = delay.left.Psdelay_read(delay.left.time.Prandom_do());
+right_list = delay.right.Psdelay_read(delay.right.time.Prandom_do());
+); // delays
+
+s_enable_rotation ? (
+rot.angles = rot.angle.Prandom_do();
+);
+
+s_enable_hilbert ? (
+_q1 = hilbert.q1.Prandom_do();
+_q2 = hilbert.q2.Prandom_do();
+);
+
+// process each band
+
+i = 1;
+while (i <= bandcount) (
+l = left_list[i];
+r = right_list[i];
+
+s_enable_hilbert ? (
+q1 = sin(s_q1);
+q2 = sin(s_q2);
+
+s_q1 === 0 ? q1 = sin(2*$pi*_q1[i]);
+s_q2 === 0 ? q2 = sin(2*$pi*_q2[i] + s_frequency_offset);
+
+s_mode === mode_ms ? (
+hilbert.transform(0.5*(l+r), q1, q2);
+up1 = hilbert.up;
+down1 = hilbert.down;
+
+hilbert.transform(2*(l-r), q1, q2);
+up2 = hilbert.up;
+down2 = hilbert.down;
+
+l = up1 - down2;
+r = up2 - down1;
+//r = down1 + up2;
+) // mode_ms
+: s_mode === mode_lr ? (
+hilbert.transform(l, q1, q2);
+up1 = hilbert.up;
+down1 = hilbert.down;
+
+hilbert.transform(r, q1, q2);
+up2 = hilbert.up;
+down2 = hilbert.down;
+
+l = up1 - down2;
+r = up2 - down1;
+) // mode_lr
+
+
+
+); // hilbert
+
+
+s_enable_rotation ? (
+s_rotation === 0 ? (
+rot.rotate(0.5 * (l+r), 0.5*(l+r), rot.angles[i]);
+) : (
+rot.rotate_stereo(l, r, s_rotation);
+);
+
+l = 0.707*rot.left;
+r = 0.707*rot.right;
+); // rotation
+
+
+s_solo === 0 ? (
+out_left += l;
+out_right += r;
+) : s_solo === i ? (
+out_left = l;
+out_right = r;
+); // solo
+
+i += 1;
+); // while
+
+
+); // process all
+
+/// @output
+
+invert === 1 ? out_left *= -1.0
+: invert === 2 ? out_right *= -1.0;
+
+spl0 = s_output_gain * (dry_gain * spl0 + left_wet_gain * out_left);
+spl1 = s_output_gain * (dry_gain * spl1 + right_wet_gain * out_right);

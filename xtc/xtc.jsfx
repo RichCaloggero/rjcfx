@@ -1,9 +1,12 @@
-desc: Stereo multitap delay with Feedback and xtc mode
+desc: rjc - v-test Stereo multitap delay with Feedback and xtc mode
+/* removed feedback from delay.write
+now both odd and even taps invert polarity
+*/
 
 import cookdsp.jsfx-inc
 
 slider1:s_delay_time=0.06<0, 1000,0.00001>Delay Time (in milliseconds)
-slider2:s_taps=100<1,100,1>taps
+slider2:s_taps=50<1,100,1>taps
 slider3:s_decay=1.75<1.0,3.0>decay
 slider4:s_xtc=1<0, 1, 1{off, on}>XTC Mode
 slider5:s_feedback=0.0<-0.95, 0.95, 0.1>Feedback level
@@ -11,14 +14,38 @@ slider6:s_interpolate_delay = 2 <0, 1, 1 {none, linear, cubic}>interpolate delay
 
 slider7:s_lowcut=120<20, 20000>high pass cutoff
 slider8:s_highcut=6000<20, 20000>low pass cutoff
-slider9:s_mix=1.0 <-1.0, 1.0>wet / dry mix
+slider9:s_mix=0.42 <-1.0, 1.0>wet / dry mix
 
 @init
+function setupDelayBuffer () 
+local (l) (
 samps = s_delay_time * 0.001 * srate;
-buffer_length = samps * s_taps;
+l = ceil(samps) * s_taps;
+l > buffer_length ? (
+d0.delay(l+5);
+d1.delay(l+5);
+sprintf(#dbg_desc, "allocated: %d * %d = %d", s_taps, ceil(samps), l);
+);
 
-d0.delay(srate);
-d1.delay(srate);
+buffer_length = l;
+);
+
+function setup () (
+setupDelayBuffer();
+
+setupDelayBuffer();
+delay_time = s_delay_time;
+feedback = s_feedback;
+decay = s_decay;
+taps = s_taps;
+wet_gain = s_mix;
+dry_gain = 1 - abs(s_mix);
+output_gain = 2 - abs(wet_gain - dry_gain);
+secs = delay_time * 0.001;
+);
+
+/// @start
+setup();
 
 // Initializes the filters
 hp0.buthp(s_lowcut);
@@ -28,34 +55,25 @@ lp0.butlp(s_highcut);
 lp1.butlp(s_highcut);
 
 @slider
-// delay time in samples
-samps = s_delay_time * 0.001 * srate;
-buffer_length = samps * s_taps;
-
-//s_delay_time != delay_time || s_taps != taps ? (
-d0.delay(buffer_length);
-d1.delay(buffer_length);
-//);
-
-delay_time = s_delay_time;
-feedback = s_feedback;
-decay = s_decay;
-taps = s_taps;
-wet_gain = s_mix;
-dry_gain = 1 - abs(s_mix);
-output_gain = 2 - abs(wet_gain - dry_gain);
-
-secs = delay_time * 0.001;
+setup();
 
 // set filter frequencies
+
 hp0.buthp_set_freq(s_lowcut);
 hp1.buthp_set_freq(s_lowcut);
 
 lp0.butlp_set_freq(s_highcut);
 lp1.butlp_set_freq(s_highcut);
 
+@block
+block_count += 1;
+
+//block_count % 200 === 0 ? sprintf(#dbg_desc, "blocks: %d", block_count);
+
 @sample
-sample_count = sample_count+1;
+sample_count += 1;
+
+
 in0 = spl0;
 in1 = spl1;
 
@@ -70,13 +88,12 @@ spl1 = lp1.butlp_do(spl1);
 );
 
 
-
 // handle delay taps
 i = 1;
 delay0 = 0;
 delay1 = 0;
 while (i <= taps) (
-gain = 1 / (decay^(i));
+gain = 1 / (decay^i);
 index = buffer_length - ((taps - i) * samps);
 
 s_interpolate_delay === 0 ? (
